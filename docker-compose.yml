@@ -1,0 +1,93 @@
+# Run `terraform apply` in terraform/ first: it generates the config, secrets
+# and certificates mounted below.
+name: cucumber
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: cucumber
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run terraform apply in terraform/ first}
+    # Postgres refuses a private key it does not own, and bind mounts from macOS
+    # do not keep ownership, so copy the certs into place first.
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        install -d -o postgres -g postgres -m 700 /etc/postgres-tls
+        install -o postgres -g postgres -m 600 \
+          /certs/server.crt /certs/server.key /certs/teleport-client-ca.crt /etc/postgres-tls/
+        exec docker-entrypoint.sh postgres \
+          -c hba_file=/etc/postgresql/pg_hba.conf \
+          -c ssl=on \
+          -c ssl_cert_file=/etc/postgres-tls/server.crt \
+          -c ssl_key_file=/etc/postgres-tls/server.key \
+          -c ssl_ca_file=/etc/postgres-tls/teleport-client-ca.crt
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      - ./postgres/certs:/certs:ro
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    # No published ports: the Teleport agent is the only way in.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cucumber"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  teleport-agent:
+    # Keep in step with the cluster version (tctl status).
+    image: public.ecr.aws/gravitational/teleport-ent-distroless:18.11.3
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./teleport/teleport.yaml:/etc/teleport/teleport.yaml:ro
+      - ./teleport/join-token:/etc/teleport/join-token:ro
+      - teleport-data:/var/lib/teleport
+    restart: unless-stopped
+
+  # Alert pipeline: Teleport audit log -> event-handler -> fluentd -> Slack.
+
+  # Keeps a short-lived Teleport identity on disk for the event handler.
+  tbot:
+    image: public.ecr.aws/gravitational/tbot-distroless:18.11.3
+    command: ["start", "-c", "/etc/tbot/tbot.yaml"]
+    volumes:
+      - ./teleport/tbot.yaml:/etc/tbot/tbot.yaml:ro
+      - ./teleport/tbot-registration-secret:/etc/tbot/registration-secret:ro
+      - tbot-data:/var/lib/teleport/bot
+      - audit-identity:/identity
+    restart: unless-stopped
+
+  event-handler:
+    image: public.ecr.aws/gravitational/teleport-plugin-event-handler:18.11.3
+    command: ["start", "--config", "/etc/teleport-event-handler.toml"]
+    depends_on:
+      - tbot
+      - fluentd
+    volumes:
+      - ./teleport/event-handler.toml:/etc/teleport-event-handler.toml:ro
+      - ./fluentd/certs:/certs:ro
+      - audit-identity:/identity:ro
+      - event-handler-data:/var/lib/teleport/plugins/event-handler
+    restart: unless-stopped
+
+  fluentd:
+    image: fluent/fluentd:v1.19-debian-2
+    volumes:
+      - ./fluentd/fluent.conf:/fluentd/etc/fluent.conf:ro
+      - ./fluentd/plugins:/fluentd/plugins:ro
+      - ./fluentd/certs:/certs:ro
+      - ./fluentd/slack-webhook-url:/run/secrets/slack-webhook-url:ro
+      # State for plugins/filter_once.rb: events already alerted on.
+      - fluentd-data:/fluentd/log
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  teleport-data:
+  tbot-data:
+  audit-identity:
+  event-handler-data:
+  fluentd-data:

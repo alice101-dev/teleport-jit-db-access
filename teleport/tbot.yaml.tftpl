@@ -1,0 +1,22 @@
+# Machine identity for the audit event handler. Rendered to tbot.yaml by
+# terraform/alerts.tf.
+version: v2
+proxy_server: ${proxy_host}:443
+
+onboarding:
+  join_method: bound_keypair
+  token: ${bot_token}
+  bound_keypair:
+    # Used once, on first start; the keypair then lives in the tbot-data volume.
+    registration_secret_path: /etc/tbot/registration-secret
+
+storage:
+  type: directory
+  path: /var/lib/teleport/bot
+
+services:
+  # Short-lived credentials read by the event handler.
+  - type: identity
+    destination:
+      type: directory
+      path: /identity

@@ -1,0 +1,26 @@
+# Database agent. Rendered to teleport.yaml by terraform/agent.tf.
+version: v3
+teleport:
+  nodename: laptop-db-agent
+  data_dir: /var/lib/teleport
+  proxy_server: ${proxy_host}:443
+  join_params:
+    method: token
+    token_name: /etc/teleport/join-token
+  log:
+    output: stderr
+    severity: INFO
+
+auth_service:
+  enabled: false
+proxy_service:
+  enabled: false
+ssh_service:
+  enabled: false
+
+db_service:
+  enabled: true
+  # Proxies every database registered with these labels (terraform/postgres.tf).
+  resources:
+    - labels:
+        env: cucumber

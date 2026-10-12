@@ -1,0 +1,18 @@
+# Written by `terraform apply`
+.env
+postgres/certs/
+fluentd/certs/
+fluentd/slack-webhook-url
+teleport/join-token
+teleport/tbot-registration-secret
+teleport/teleport.yaml
+teleport/tbot.yaml
+teleport/event-handler.toml
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+.DS_Store

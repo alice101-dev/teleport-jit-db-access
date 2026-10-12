@@ -1,0 +1,13 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+
+teleport_proxy_host = "example.teleport.sh"
+admin_user          = "you@example.com"
+
+trusted_devices = {
+  "admin-macbook" = {
+    asset_tag = "SERIALNUMBER"
+    os_type   = "macos"
+  }
+}
+
+slack_alert_webhook_url = "https://hooks.slack.com/services/..."
