@@ -1,0 +1,22 @@
+# Pulls audit events from Teleport and forwards them to Fluentd. Rendered to
+# event-handler.toml by terraform/alerts.tf.
+storage = "/var/lib/teleport/plugins/event-handler/storage"
+timeout = "10s"
+batch = 20
+
+# Only the events the alert rules use: queries and prepared statements for
+# fluentd/fluent.conf, the rest for the EVENTS table in
+# fluentd/plugins/filter_security_alert.rb.
+types = "db.session.query,db.session.postgres.statements.parse,user.login,db.session.start,mfa.add,mfa.delete,role.created,role.updated,role.deleted,user.create,user.update,user.delete,access_list.create,access_list.update,access_list.delete,access_list.member.create,access_list.member.update,access_list.member.delete"
+
+[forward.fluentd]
+ca = "/certs/ca.crt"
+cert = "/certs/client.crt"
+key = "/certs/client.key"
+url = "https://fluentd:8888/events.log"
+session-url = "https://fluentd:8888/session"
+
+[teleport]
+addr = "${proxy_host}:443"
+identity = "/identity/identity"
+refresh.enabled = true
